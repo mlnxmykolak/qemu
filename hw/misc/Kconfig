@@ -131,4 +131,6 @@ config MAC_VIA
     select MOS6522
     select ADB
 
+config MLXREG
+    bool
 source macio/Kconfig
