@@ -9,6 +9,10 @@ config TMP105
     bool
     depends on I2C
 
+config TMP102
+    bool
+    depends on I2C
+
 config TMP421
     bool
     depends on I2C
