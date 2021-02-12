@@ -162,6 +162,7 @@
 #define MLXPLAT_CPLD_LPC_REG_TACHO4_OFFSET  0xe7
 #define MLXPLAT_CPLD_LPC_REG_TACHO5_OFFSET  0xe8
 #define MLXPLAT_CPLD_LPC_REG_TACHO6_OFFSET  0xe9
+#define MLXPLAT_CPLD_LPC_REG_TACHO_HOLE_OFFSET  0xea
 #define MLXPLAT_CPLD_LPC_REG_TACHO7_OFFSET  0xeb
 #define MLXPLAT_CPLD_LPC_REG_TACHO8_OFFSET  0xec
 #define MLXPLAT_CPLD_LPC_REG_TACHO9_OFFSET  0xed
@@ -243,6 +244,9 @@ mlxreg_io_regmap_write(void *opaque, hwaddr addr, uint64_t val,
                        unsigned size)
 {
     mlxregState *s = opaque;
+    uint16_t fan_cap=0;
+    uint8_t i=0,j=0;
+    uint8_t tacho=0;
 
     DPRINTK("io write regmap addr:%x :size:%d val:%x\n", (uint32_t)addr, size, (uint32_t)val);
     if (addr < MLXREG_SIZE-size) {
@@ -271,6 +275,20 @@ mlxreg_io_regmap_write(void *opaque, hwaddr addr, uint64_t val,
                        if(val+9 < s->i2c_bus_maxnum) {
                            s->mux_num=val+25;
                            DPRINTK("mlxi2c mux i2c-%d\n", s->mux_num);
+                       }
+                       break;
+                   case MLXPLAT_CPLD_LPC_REG_PWM1_OFFSET:
+                       s->io_regmap_buf[MLXPLAT_CPLD_LPC_REG_PWM1_OFFSET]=val;
+                       fan_cap=*(uint16_t*)&s->io_regmap_buf[MLXPLAT_CPLD_LPC_REG_FAN_CAP1_OFFSET];
+                       for(i=0,j=0; i<17; i++) {
+                           if(MLXPLAT_CPLD_LPC_REG_TACHO1_OFFSET+i==MLXPLAT_CPLD_LPC_REG_TACHO_HOLE_OFFSET)
+                               continue;
+
+                           if((uint16_t)BIT(j++)&fan_cap) {
+                               tacho=(val-((rand() % (14 - 8 + 1)) + 8));
+                               DPRINTK("tacho set off:0x%x, val\n", MLXPLAT_CPLD_LPC_REG_TACHO1_OFFSET+i, ~tacho);
+                               s->io_regmap_buf[MLXPLAT_CPLD_LPC_REG_TACHO1_OFFSET+i]=~tacho;
+                           }
                        }
                        break;
                 }
