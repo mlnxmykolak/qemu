@@ -5,6 +5,9 @@ config APPLESMC
 config MAX111X
     bool
 
+config MAX11603
+    bool
+
 config TMP105
     bool
     depends on I2C
