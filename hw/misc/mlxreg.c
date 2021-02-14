@@ -203,6 +203,8 @@ typedef struct mlxregState {
     MemoryRegion io_dummy[4];
     uint8_t io_regmap_buf[MLXREG_SIZE];
     uint8_t* io_i2c_buf;
+    uint32_t regio_base;
+    uint32_t i2cio_base;
 
     void *opaque;
     qemu_irq irq;
@@ -453,44 +455,23 @@ static const MemoryRegionOps mlxreg_io_i2c_ops = {
     },
 };
 
-static void mlxreg_write_config(PCIDevice *pci_dev, uint32_t address,
-                                uint32_t val, int len)
-{
-    //mlxregState *s = PCI_MLXREG_DEV(pci_dev);
-
-    pci_default_write_config(pci_dev, address, val, len);
-
-}
-
-/* IRQ handling */
-
-static void mlxreg_irq_handler(void *opaque, int irq, int level)
-{
-    DPRINTK("mlxreg_irq_handler irq:%d, level:% d\n", irq, level);
-}
-
-
 static void mlxreg_realize(PCIDevice *pci_dev, Error **errp)
 {
     mlxregState *d = PCI_MLXREG_DEV(pci_dev);
+    PCIBus *bus = pci_get_bus(pci_dev);
+
     char bus_name[12]="mlxi2c-1";
 
-    pci_dev->config_write = mlxreg_write_config;
+    pci_dev->config[PCI_INTERRUPT_LINE] = 17;
+    pci_dev->config[PCI_INTERRUPT_PIN] = 2;
 
-    //pci_dev->config[PCI_INTERRUPT_LINE] = 17;
-    //pci_dev->config[PCI_INTERRUPT_PIN] = 3;
+    d->irq = pci_allocate_irq(pci_dev);
 
-    //d->irq = pci_allocate_irq(pci_dev);
+    memory_region_init_io(&d->io_i2c, OBJECT(d), &mlxreg_io_i2c_ops, d, "mlxplat_cpld_lpc_i2c_ctrl", MLXREG_SIZE);
+    memory_region_init_io(&d->io_regmap, OBJECT(d), &mlxreg_io_regmap_ops, d, "mlxplat_cpld_lpc_regs", MLXREG_SIZE);
 
-    d->irq = qemu_allocate_irq(mlxreg_irq_handler, pci_dev, 1);
-
-    memory_region_init_io(&d->io_i2c, OBJECT(d), &mlxreg_io_i2c_ops, d, "mlxplat_cpld_lpc_i2c_ctrl", 0x100);
-
-    memory_region_init_io(&d->io_regmap, OBJECT(d), &mlxreg_io_regmap_ops, d, "mlxplat_cpld_lpc_regs", 0x100);
-
-    pci_register_bar(pci_dev, 0, PCI_BASE_ADDRESS_SPACE_IO, &d->io_i2c);
-
-    pci_register_bar(pci_dev, 4, PCI_BASE_ADDRESS_SPACE_IO, &d->io_regmap);
+    memory_region_add_subregion(bus->address_space_io, d->i2cio_base, &d->io_i2c);
+    memory_region_add_subregion(bus->address_space_io, d->regio_base, &d->io_regmap);
 
     d->bus=g_malloc0(d->i2c_bus_maxnum * sizeof(I2CBus *));
     for (int i=0; i<d->i2c_bus_maxnum; i++) {
@@ -553,6 +534,8 @@ static void mlxreg_get_i2cbusnum(Object *obj, Visitor *v, const char *name,
 
 static Property mlxreg_props[] = {
     DEFINE_PROP_DRIVE("cpld", mlxregState, blk),
+    DEFINE_PROP_UINT32("regio_base", mlxregState, regio_base, 0x2500),
+    DEFINE_PROP_UINT32("i2cio_base", mlxregState, i2cio_base, 0x2000),
     DEFINE_PROP_END_OF_LIST()
 };
 
@@ -564,7 +547,7 @@ static void mlxreg_class_init(ObjectClass *klass, void *data)
     k->realize = mlxreg_realize;
     k->exit = mlxreg_uninit;
     k->vendor_id = PCI_VENDOR_ID_NVIDIA;
-    k->device_id = 0x0101;
+    k->device_id = 0x1001;
     k->revision = 0x01;
     k->class_id = PCI_CLASS_SYSTEM_OTHER;
     dc->desc = "mlxreg PCI";
