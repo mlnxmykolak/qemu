@@ -195,3 +195,5 @@ typedef struct mlxregState {
     OBJECT_CHECK(mlxregState, (obj), TYPE_PCI_MLXREG_DEV)
 
 #endif
+
+Aml *build_mlxreg_device_aml(void);

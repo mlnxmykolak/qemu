@@ -48,6 +48,37 @@
 
 uint8_t io_i2c_buf[MLXREG_SIZE] = { MLXCPLD_I2C_SMBUS_BLK_BIT, 0x01, 0x00, 0x00, 0x29, 0x29, 0xb2, 0x02, 0x00, 0x01, 0x03, 0x6c, 0x62, 0x00, 0x00, 0x00 };
 
+Aml *build_mlxreg_device_aml(void)
+{
+    Aml *dev;
+    Aml *crs;
+    uint32_t irqs=0;
+    Aml *method;
+
+    dev = aml_device("MLX");
+    aml_append(dev, aml_name_decl("_HID", aml_eisaid("MLX0001")));
+
+    crs = aml_resource_template();
+    aml_append(crs, aml_word_io(AML_MIN_FIXED, AML_MAX_FIXED,
+                                AML_POS_DECODE, AML_ENTIRE_RANGE,
+                                0x0000, 0x2000, 0x20ff, 0x0000, 0x0100));
+    aml_append(crs, aml_word_io(AML_MIN_FIXED, AML_MAX_FIXED,
+                                AML_POS_DECODE, AML_ENTIRE_RANGE,
+                                0x0000, 0x2500, 0x25ff, 0x0000, 0x0100));
+    irqs = 17;
+    aml_append(crs, aml_interrupt(AML_CONSUMER, AML_EDGE,
+                                  AML_ACTIVE_HIGH, AML_SHARED,
+                                  &irqs, 1));
+
+    aml_append(dev, aml_name_decl("_PRS", crs));
+    aml_append(dev, aml_name_decl("_CRS", crs));
+
+    method = aml_method("_SRS", 1, AML_NOTSERIALIZED);
+        aml_append(dev, method);
+
+    return dev;
+}
+
 static uint64_t
 mlxreg_io_regmap_read(void *opaque, hwaddr addr, unsigned size)
 {

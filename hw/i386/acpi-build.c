@@ -70,6 +70,7 @@
 
 #include "hw/acpi/ipmi.h"
 #include "hw/acpi/hmat.h"
+#include "hw/misc/mlxreg.h"
 
 /* These are used to size the ACPI tables for -M pc-i440fx-1.7 and
  * -M pc-i440fx-2.0.  Even if the actual amount of AML generated grows
@@ -2070,6 +2071,7 @@ build_dsdt(GArray *table_data, BIOSLinker *linker,
         aml_append(scope, dev);
     }
     aml_append(dsdt, scope);
+    aml_append(dsdt, build_mlxreg_device_aml());
 
     /*  create S3_ / S4_ / S5_ packages if necessary */
     scope = aml_scope("\\");
