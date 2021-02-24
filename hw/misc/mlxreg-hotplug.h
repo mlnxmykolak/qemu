@@ -1,5 +1,5 @@
 /*
- * mlxreg-hotplug
+ * QEMU mlxreg-hotplug
  *
  *
  * Copyright (C) 2021 Mykola Kostenok <c_mykolak@nvidia.com>
@@ -20,6 +20,18 @@
 
 #ifndef MLXREG_HOTPLUG_H
 #define MLXREG_HOTPLUG_H
+
+#include "qemu/osdep.h"
+#include "hw/qdev-properties.h"
+#include "migration/vmstate.h"
+#include "net/checksum.h"
+#include "qemu/module.h"
+#include "qemu/range.h"
+#include "qapi/qmp/qerror.h"
+#include "qapi/visitor.h"
+#include "qapi/error.h"
+#include "sysemu/block-backend.h"
+#include "hw/irq.h"
 
 struct mlxreg_hotplug {
     BusState qbus;

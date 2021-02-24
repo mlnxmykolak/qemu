@@ -38,12 +38,12 @@
 #define _DEBUG_MLXREG
 
 #ifdef DEBUG_MLXREG
-#define DPRINTK(FMT, ...) printf(TYPE_PCI_MLXREG_DEV ": " FMT, ## __VA_ARGS__)
+#define DPRINTK(FMT, ...) printf(TYPE_MLXREG_DEV ": " FMT, ## __VA_ARGS__)
 #else
 #define DPRINTK(FMT, ...) do {} while (0)
 #endif
 
-#define ERR(FMT, ...) fprintf(stderr, TYPE_PCI_MLXREG_DEV " : " FMT, \
+#define ERR(FMT, ...) fprintf(stderr, TYPE_MLXREG_DEV " : " FMT, \
                             ## __VA_ARGS__)
 
 uint8_t io_i2c_buf[MLXREG_SIZE] = { MLXCPLD_I2C_SMBUS_BLK_BIT, 0x01, 0x00, 0x00, 0x29, 0x29, 0xb2, 0x02, 0x00, 0x01, 0x03, 0x6c, 0x62, 0x00, 0x00, 0x00 };
@@ -89,7 +89,6 @@ mlxreg_io_regmap_read(void *opaque, hwaddr addr, unsigned size)
         if (size <= sizeof(ret_val)) {
             memcpy((uint8_t*)&ret_val, &s->io_regmap_buf[addr], size);
             DPRINTK("io read regmap addr:%x :size:%d val:0x%x\n", (uint32_t)addr, size, (uint32_t)ret_val);
-            printf("io read regmap addr:%x :size:%d val:0x%x\n", (uint32_t)addr, size, (uint32_t)ret_val);
             return ret_val;
         }
     }
@@ -106,11 +105,16 @@ mlxreg_io_regmap_write(void *opaque, hwaddr addr, uint64_t val,
     uint8_t tacho = 0;
 
     DPRINTK("io write regmap addr:%x :size:%d val:%x\n", (uint32_t)addr, size, (uint32_t)val);
-    printf("io write regmap addr:%x :size:%d val:%x\n", (uint32_t)addr, size, (uint32_t)val);
     if (addr < MLXREG_SIZE-size) {
         switch (size) {
             case 1:
                 switch (addr) {
+                   case MLXPLAT_CPLD_LPC_REG_ASIC_EVENT_OFFSET:
+                   case MLXPLAT_CPLD_LPC_REG_PSU_EVENT_OFFSET:
+                   case MLXPLAT_CPLD_LPC_REG_PWR_EVENT_OFFSET:
+                   case MLXPLAT_CPLD_LPC_REG_FAN_EVENT_OFFSET:
+                       s->io_regmap_buf[MLXPLAT_CPLD_LPC_REG_AGGR_OFFSET]=0xff;
+                       break;
                    case MLXPLAT_CPLD_LPC_I2C_CH1_OFF:
                        if(val+1 < s->i2c_bus_maxnum) {
                            s->mux_num=val+1;
@@ -312,8 +316,8 @@ static const MemoryRegionOps mlxreg_io_i2c_ops = {
 
 static void mlxreg_realize(PCIDevice *pci_dev, Error **errp)
 {
-    mlxregState *d = PCI_MLXREG_DEV(pci_dev);
-    PCIBus *bus = pci_get_bus(pci_dev);
+    mlxregState *d = MLXREG_DEV(pci_dev);
+    X86MachineState *x86ms = X86_MACHINE(qdev_get_machine());
 
     memset(d->io_regmap_buf, 0, MLXREG_SIZE);
 
@@ -321,27 +325,29 @@ static void mlxreg_realize(PCIDevice *pci_dev, Error **errp)
         int len = blk_pread(d->blk, 0, d->io_regmap_buf, MLXREG_SIZE);
 
         if (len != MLXREG_SIZE) {
-            ERR(TYPE_PCI_MLXREG_DEV
+            ERR(TYPE_MLXREG_DEV
                     " : Failed initial sync with backing cpld file\n");
         }
         DPRINTK("Reset read backing cpld file\n");
     }
 
     // Initially we dont have hotplug devices. If we want to have devices on start attach them by config.
-    d->io_regmap_buf[MLXPLAT_CPLD_LPC_REG_FAN_OFFSET] |= d->io_regmap_buf[MLXPLAT_CPLD_LPC_REG_FAN_DRW_CAP_OFFSET];
-    d->io_regmap_buf[MLXPLAT_CPLD_LPC_REG_PSU_OFFSET] |= MASK(2);
-    d->io_regmap_buf[MLXPLAT_CPLD_LPC_REG_PWR_OFFSET] &= ~MASK(2);
+    d->io_regmap_buf[MLXPLAT_CPLD_LPC_REG_FAN_OFFSET] = 0xff;
+    d->io_regmap_buf[MLXPLAT_CPLD_LPC_REG_PSU_OFFSET] = 0xff;
+    d->io_regmap_buf[MLXPLAT_CPLD_LPC_REG_PWR_OFFSET] = 0xff;
+    d->io_regmap_buf[MLXPLAT_CPLD_LPC_REG_ASIC_HEALTH_OFFSET] = 0xff;
+
 
     pci_dev->config[PCI_INTERRUPT_LINE] = 17;
     pci_dev->config[PCI_INTERRUPT_PIN] = 2;
 
-    d->irq = pci_allocate_irq(pci_dev);
-
     memory_region_init_io(&d->io_i2c, OBJECT(d), &mlxreg_io_i2c_ops, d, "mlxplat_cpld_lpc_i2c_ctrl", MLXREG_SIZE);
     memory_region_init_io(&d->io_regmap, OBJECT(d), &mlxreg_io_regmap_ops, d, "mlxplat_cpld_lpc_regs", MLXREG_SIZE);
 
-    memory_region_add_subregion(bus->address_space_io, d->i2cio_base, &d->io_i2c);
-    memory_region_add_subregion(bus->address_space_io, d->regio_base, &d->io_regmap);
+    memory_region_add_subregion(get_system_io(), d->i2cio_base, &d->io_i2c);
+    memory_region_add_subregion(get_system_io(), d->regio_base, &d->io_regmap);
+
+    d->irq = x86ms->gsi[17];
 
     char bus_name[12]="mlxi2c-1";
     d->bus=g_malloc0(d->i2c_bus_maxnum * sizeof(I2CBus *));
@@ -358,7 +364,7 @@ static void mlxreg_realize(PCIDevice *pci_dev, Error **errp)
 static void
 mlxreg_uninit(PCIDevice *dev)
 {
-    mlxregState *d = PCI_MLXREG_DEV(dev);
+    mlxregState *d = MLXREG_DEV(dev);
     g_free(d->bus);
     DPRINTK("unloaded mlxreg pci\n");
 }
@@ -366,7 +372,7 @@ mlxreg_uninit(PCIDevice *dev)
 static void mlxreg_set_i2cbusnum(Object *obj, Visitor *v, const char *name,
                                 void *opaque, Error **errp)
 {
-    mlxregState *d = PCI_MLXREG_DEV(obj);
+    mlxregState *d = MLXREG_DEV(obj);
     int64_t value;
     Error *local_err = NULL;
 
@@ -382,7 +388,7 @@ static void mlxreg_set_i2cbusnum(Object *obj, Visitor *v, const char *name,
 static void mlxreg_get_i2cbusnum(Object *obj, Visitor *v, const char *name,
                                  void *opaque, Error **errp)
 {
-    mlxregState *d = PCI_MLXREG_DEV(obj);
+    mlxregState *d = MLXREG_DEV(obj);
     int64_t value = d->i2c_bus_maxnum;
     visit_type_int(v, name, &value, errp);
 }
@@ -406,14 +412,14 @@ static void mlxreg_class_init(ObjectClass *klass, void *data)
     k->device_id = 0x1001;
     k->revision = 0x01;
     k->class_id = PCI_CLASS_SYSTEM_OTHER;
-    dc->desc = "mlxreg PCI";
+    dc->desc = "mlxreg";
     set_bit(DEVICE_CATEGORY_MISC, dc->categories);
     device_class_set_props(dc, mlxreg_props);
 }
 
 static void mlxreg_initfn(Object *obj)
 {
-    mlxregState *d = PCI_MLXREG_DEV(obj);
+    mlxregState *d = MLXREG_DEV(obj);
     d->i2c_bus_maxnum = 0;
     d->mux_num = 0;
     d->io_i2c_buf = io_i2c_buf;
@@ -423,8 +429,8 @@ static void mlxreg_initfn(Object *obj)
                         mlxreg_set_i2cbusnum, NULL, NULL, NULL);
 }
 
-static const TypeInfo pci_mlxreg_info = {
-    .name          = TYPE_PCI_MLXREG_DEV,
+static const TypeInfo mlxreg_info = {
+    .name          = TYPE_MLXREG_DEV,
     .parent        = TYPE_PCI_DEVICE,
     .instance_size = sizeof(mlxregState),
     .class_init    = mlxreg_class_init,
@@ -435,9 +441,9 @@ static const TypeInfo pci_mlxreg_info = {
     },
 };
 
-static void pci_mlxreg_register_types(void)
+static void mlxreg_register_types(void)
 {
-    type_register_static(&pci_mlxreg_info);
+    type_register_static(&mlxreg_info);
 }
 
-type_init(pci_mlxreg_register_types)
+type_init(mlxreg_register_types)

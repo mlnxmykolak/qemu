@@ -21,10 +21,12 @@
 #ifndef MLXREG_H
 #define MLXREG_H
 
-#include "qemu/iov.h"
 #include "sysemu/block-backend.h"
 #include "hw/pci/pci.h"
 #include "hw/pci/pci_bridge.h"
+#include "mlxreg-hotplug.h"
+#include "hw/acpi/aml-build.h"
+#include "hw/i386/x86.h"
 #include "mlxreg-hotplug.h"
 
 
@@ -189,10 +191,10 @@ typedef struct mlxregState {
     mlxreg_hotplug *mbus;
 } mlxregState;
 
-#define TYPE_PCI_MLXREG_DEV "mlxreg"
+#define TYPE_MLXREG_DEV "mlxreg"
 
-#define PCI_MLXREG_DEV(obj) \
-    OBJECT_CHECK(mlxregState, (obj), TYPE_PCI_MLXREG_DEV)
+#define MLXREG_DEV(obj) \
+    OBJECT_CHECK(mlxregState, (obj), TYPE_MLXREG_DEV)
 
 #endif
 
