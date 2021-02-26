@@ -272,7 +272,7 @@ static void mlxreg_io_i2c_write(void *opaque, hwaddr addr,
             case MLXCPLD_LPCI2C_CMD_REG:
                 s->io_i2c_buf[MLXCPLD_LPCI2C_STATUS_REG]=MLXCPLD_LPCI2C_NO_IND;
                 if(!(s->io_i2c_buf[MLXCPLD_LPCI2C_CMD_REG]&0x1)) {
-                    ret_val=mlxreg_write_i2c_block(s->bus[s->mux_num],
+                    ret_val=mlxreg_write_i2c_block(s->i2c_bus[s->mux_num],
                                        s->io_i2c_buf[MLXCPLD_LPCI2C_CMD_REG]>>1,
                                        &s->io_i2c_buf[MLXCPLD_LPCI2C_DATA_REG],
                                        s->io_i2c_buf[MLXCPLD_LPCI2C_NUM_DAT_REG]+s->io_i2c_buf[MLXCPLD_LPCI2C_NUM_ADDR_REG]);
@@ -282,7 +282,7 @@ static void mlxreg_io_i2c_write(void *opaque, hwaddr addr,
                 }
                 else
                 {
-                    ret_val=mlxreg_read_i2c_block(s->bus[s->mux_num],
+                    ret_val=mlxreg_read_i2c_block(s->i2c_bus[s->mux_num],
                                           s->io_i2c_buf[MLXCPLD_LPCI2C_CMD_REG]>>1,
                                           &s->io_i2c_buf[MLXCPLD_LPCI2C_DATA_REG],
                                           s->io_i2c_buf[MLXCPLD_LPCI2C_NUM_ADDR_REG],
@@ -358,10 +358,10 @@ static void mlxreg_realize(PCIDevice *pci_dev, Error **errp)
     d->irq = x86ms->gsi[17];
 
     char bus_name[12]="mlxi2c-1";
-    d->bus=g_malloc0(d->i2c_bus_maxnum * sizeof(I2CBus *));
+    d->i2c_bus=g_malloc0(d->i2c_bus_maxnum * sizeof(I2CBus *));
     for (int i=0; i<d->i2c_bus_maxnum; i++) {
-        snprintf(bus_name,12,"mlxi2c-%d",i);
-        d->bus[i] = i2c_init_bus(DEVICE(d), bus_name);
+        snprintf(bus_name, 12, "mlxi2c-%d", i);
+        d->i2c_bus[i] = i2c_init_bus(DEVICE(d), bus_name);
     }
 
     d->mbus = mlxreg_create_bus(DEVICE(d), "mlxreg-hotplug");
@@ -373,7 +373,7 @@ static void
 mlxreg_uninit(PCIDevice *dev)
 {
     mlxregState *d = MLXREG_DEV(dev);
-    g_free(d->bus);
+    g_free(d->i2c_bus);
     DPRINTK("unloaded mlxreg pci\n");
 }
 

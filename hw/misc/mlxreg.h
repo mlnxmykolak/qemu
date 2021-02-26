@@ -183,7 +183,7 @@ typedef struct mlxregState {
     void *opaque;
     qemu_irq irq;
 
-    I2CBus **bus;
+    I2CBus **i2c_bus;
     uint8_t i2c_bus_maxnum;
     uint8_t mux_num;
 

@@ -93,4 +93,4 @@ obj-$(CONFIG_MAC_VIA) += mac_via.o
 
 common-obj-$(CONFIG_GRLIB) += grlib_ahb_apb_pnp.o
 
-common-obj-$(CONFIG_MLXREG) += mlxreg.o mlxreg-hotplug.o
+common-obj-$(CONFIG_MLXREG) += mlxreg.o mlxreg-hotplug.o mlx-hotplug-fan.o mlx-hotplug-psu.o

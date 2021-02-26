@@ -32,6 +32,9 @@
 #include "qapi/error.h"
 #include "sysemu/block-backend.h"
 #include "hw/irq.h"
+#include "monitor/qdev.h"
+#include "qapi/qmp/qdict.h"
+#include "qapi/qmp/qstring.h"
 
 struct mlxreg_hotplug {
     BusState qbus;
