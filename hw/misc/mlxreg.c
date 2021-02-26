@@ -89,6 +89,7 @@ mlxreg_io_regmap_read(void *opaque, hwaddr addr, unsigned size)
         if (size <= sizeof(ret_val)) {
             memcpy((uint8_t*)&ret_val, &s->io_regmap_buf[addr], size);
             DPRINTK("io read regmap addr:%x :size:%d val:0x%x\n", (uint32_t)addr, size, (uint32_t)ret_val);
+            //printf("io read regmap addr:%x :size:%d val:0x%x\n", (uint32_t)addr, size, (uint32_t)ret_val);
             return ret_val;
         }
     }
@@ -105,6 +106,8 @@ mlxreg_io_regmap_write(void *opaque, hwaddr addr, uint64_t val,
     uint8_t tacho = 0;
 
     DPRINTK("io write regmap addr:%x :size:%d val:%x\n", (uint32_t)addr, size, (uint32_t)val);
+    /*if(addr != MLXPLAT_CPLD_LPC_I2C_CH1_OFF)
+        printf("io write regmap addr:%x :size:%d val:%x\n", (uint32_t)addr, size, (uint32_t)val);*/
     if (addr < MLXREG_SIZE-size) {
         switch (size) {
             case 1:
@@ -238,22 +241,23 @@ static uint64_t mlxreg_io_i2c_read(void *opaque, hwaddr addr,
     uint64_t ret_val = 0;
 
     if (addr < MLXREG_SIZE-size) {
-        DPRINTK("io i2c read addr:0x%x size:%d ",(uint32_t)addr, size);
-        if(size <= sizeof(ret_val)) {
-            memcpy((uint8_t*)&ret_val, &s->io_i2c_buf[addr], size);
-            DPRINTK("val:0x%x\n", (uint32_t)ret_val);
-            return ret_val;
+        if(size > sizeof(ret_val)) {
+            size=sizeof(ret_val);
         }
+        memcpy((uint8_t*)&ret_val, &s->io_i2c_buf[addr], size);
+        DPRINTK("io i2c read addr:0x%x size:%d val:0x%x\n",(uint32_t)addr, size, (uint32_t)ret_val);
+        //printf("io i2c read addr:0x%x size:%d val:0x%x\n",(uint32_t)addr, size, (uint32_t)ret_val);
     }
-    return 0;
+    return ret_val;
 }
 
 static void mlxreg_io_i2c_write(void *opaque, hwaddr addr,
                            uint64_t val, unsigned size)
 {
     mlxregState *s = opaque;
-    int ret_len = 0;
+    int ret_val = 0;
     DPRINTK("io i2c write addr:0x%x size:%d val:0x%x\n", (uint32_t)addr, size, (uint32_t)val);
+    //printf("io i2c write addr:0x%x size:%d val:0x%x\n", (uint32_t)addr, size, (uint32_t)val);
     if (addr < MLXREG_SIZE-size) {
         memcpy(&s->io_i2c_buf[addr], (uint8_t*)&val, size);
         switch (addr) {
@@ -268,26 +272,31 @@ static void mlxreg_io_i2c_write(void *opaque, hwaddr addr,
             case MLXCPLD_LPCI2C_CMD_REG:
                 s->io_i2c_buf[MLXCPLD_LPCI2C_STATUS_REG]=MLXCPLD_LPCI2C_NO_IND;
                 if(!(s->io_i2c_buf[MLXCPLD_LPCI2C_CMD_REG]&0x1)) {
-                    mlxreg_write_i2c_block(s->bus[s->mux_num],
+                    ret_val=mlxreg_write_i2c_block(s->bus[s->mux_num],
                                        s->io_i2c_buf[MLXCPLD_LPCI2C_CMD_REG]>>1,
                                        &s->io_i2c_buf[MLXCPLD_LPCI2C_DATA_REG],
                                        s->io_i2c_buf[MLXCPLD_LPCI2C_NUM_DAT_REG]+s->io_i2c_buf[MLXCPLD_LPCI2C_NUM_ADDR_REG]);
+                    if (ret_val < 0) {
+                        s->io_i2c_buf[MLXCPLD_LPCI2C_STATUS_REG]|=MLXCPLD_LPCI2C_STATUS_NACK;
+                    }
                 }
                 else
                 {
-                    ret_len=mlxreg_read_i2c_block(s->bus[s->mux_num],
+                    ret_val=mlxreg_read_i2c_block(s->bus[s->mux_num],
                                           s->io_i2c_buf[MLXCPLD_LPCI2C_CMD_REG]>>1,
                                           &s->io_i2c_buf[MLXCPLD_LPCI2C_DATA_REG],
                                           s->io_i2c_buf[MLXCPLD_LPCI2C_NUM_ADDR_REG],
                                           s->io_i2c_buf[MLXCPLD_LPCI2C_NUM_DAT_REG]);
-                    if (ret_len > 4) {
-                        s->io_i2c_buf[MLXCPLD_LPCI2C_NUM_ADDR_REG]=MLXCPLD_I2C_SMBUS_BLK_BIT;
-                        s->io_i2c_buf[MLXCPLD_LPCI2C_NUM_DAT_REG]=ret_len;
-                    }
-                    else {
-                        s->io_i2c_buf[MLXCPLD_LPCI2C_NUM_ADDR_REG]=0;
+                    if (ret_val < 0) {
+                        s->io_i2c_buf[MLXCPLD_LPCI2C_STATUS_REG]|=MLXCPLD_LPCI2C_STATUS_NACK;
+                    } else {
+                        s->io_i2c_buf[MLXCPLD_LPCI2C_NUM_DAT_REG]=ret_val;
+                        if (ret_val > 4) {
+                             s->io_i2c_buf[MLXCPLD_LPCI2C_NUM_ADDR_REG]|=MLXCPLD_I2C_SMBUS_BLK_BIT;
+                        }
                     }
                 }
+                s->io_i2c_buf[MLXCPLD_LPCI2C_STATUS_REG]|=MLXCPLD_LPCI2C_TRANS_END;
                 break;
             case MLXCPLD_LPCI2C_NUM_DAT_REG:
                 break;
@@ -301,7 +310,6 @@ static void mlxreg_io_i2c_write(void *opaque, hwaddr addr,
                 break;
         }
     }
-    s->io_i2c_buf[MLXCPLD_LPCI2C_STATUS_REG]=MLXCPLD_LPCI2C_TRANS_END;
 }
 
 static const MemoryRegionOps mlxreg_io_i2c_ops = {
@@ -334,7 +342,7 @@ static void mlxreg_realize(PCIDevice *pci_dev, Error **errp)
     // Initially we dont have hotplug devices. If we want to have devices on start attach them by config.
     d->io_regmap_buf[MLXPLAT_CPLD_LPC_REG_FAN_OFFSET] = 0xff;
     d->io_regmap_buf[MLXPLAT_CPLD_LPC_REG_PSU_OFFSET] = 0xff;
-    d->io_regmap_buf[MLXPLAT_CPLD_LPC_REG_PWR_OFFSET] = 0xff;
+    d->io_regmap_buf[MLXPLAT_CPLD_LPC_REG_PWR_OFFSET] = 0x00;
     d->io_regmap_buf[MLXPLAT_CPLD_LPC_REG_ASIC_HEALTH_OFFSET] = 0xff;
 
 
