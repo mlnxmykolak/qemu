@@ -8,6 +8,9 @@ config MAX111X
 config MAX11603
     bool
 
+config PMBUS
+    bool
+
 config TMP105
     bool
     depends on I2C
