@@ -36,7 +36,7 @@ typedef struct mlx_hotplug_psu_state {
     DeviceState qdev;
     uint8_t slot;
     DeviceState *dev;
-
+    DeviceState *vpd_dev;
 } mlx_hotplug_psu_state;
 #define TYPE_MLX_HOTPLUG_PSU "mlx_hotplug_psu"
 #define MLX_PSU(obj) OBJECT_CHECK(mlx_hotplug_psu_state, (obj), TYPE_MLX_HOTPLUG_PSU)
@@ -87,6 +87,21 @@ static void mlx_hotplug_psu_realize(DeviceState *ds, Error **errp)
     qdev_prop_set_uint8(psu_hdev->dev, "address", 0x5a-hd->slot);
     qdev_init_nofail(psu_hdev->dev);
 
+
+    psu_hdev->vpd_dev = qdev_create(BUS(mlxreg->i2c_bus[4]), "at24c-eeprom");
+    if (!psu_hdev->dev)
+    {
+        error_setg(errp, "mlxreg_psu: slot %d failed to create device. \n",
+                   hd->slot);
+    }
+    qdev_prop_set_uint8(psu_hdev->vpd_dev, "address", 0x52 - hd->slot);
+    qdev_prop_set_uint32(psu_hdev->vpd_dev, "rom-size", 4096);
+    char drive_name[9] = "psu1_vpd";
+    snprintf(drive_name, 9, "psu%d_vpd", hd->slot);
+    object_property_set_str(OBJECT(psu_hdev->vpd_dev), drive_name, "drive",
+                            errp);
+    qdev_init_nofail(psu_hdev->vpd_dev);
+
     *aggr &= ~MLXREG_SEC1_INT_AGG;
     *aggrlo &= ~MLXREG_PSU_PRSNT_INT_L;
     *psu_event |= BIT(hd->slot-1);
@@ -123,6 +138,9 @@ static void mlx_hotplug_psu_unrealize(DeviceState *ds, Error **errp)
 
     if (psu_hdev->dev) {
         object_unparent(OBJECT(psu_hdev->dev));
+    }
+    if (psu_hdev->vpd_dev) {
+        object_unparent(OBJECT(psu_hdev->vpd_dev));
     }
 }
 
