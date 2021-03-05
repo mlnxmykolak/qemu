@@ -75,17 +75,25 @@ static void tmp102_alarm_update(TMP102State *s)
     tmp102_interrupt_update(s);
 }
 
-static void tmp102_get_temperature(Object *obj, Visitor *v, const char *name,
+static void tmp102_get(Object *obj, Visitor *v, const char *name,
                                    void *opaque, Error **errp)
 {
     TMP102State *s = TMP102(obj);
-    int64_t value = s->temperature * 1000 / 128;
+    int64_t value=0;
+    if (strcmp(name, "temperature") == 0) {
+        value = s->temperature * 1000 / 128;
+    } else if (strcmp(name, "limit_high") == 0) {
+        value = s->limit[0] * 1000 / 128;
+    }
+    else if (strcmp(name, "limit_hyst") == 0) {
+        value = s->limit[1] * 1000 / 128;
+    }
 
     visit_type_int(v, name, &value, errp);
 }
 
 
-static void tmp102_set_temperature(Object *obj, Visitor *v, const char *name,
+static void tmp102_set(Object *obj, Visitor *v, const char *name,
                                    void *opaque, Error **errp)
 {
     TMP102State *s = TMP102(obj);
@@ -102,8 +110,14 @@ static void tmp102_set_temperature(Object *obj, Visitor *v, const char *name,
                    temp / 1000, temp % 1000);
         return;
     }
-
-    s->temperature = (int16_t) (temp * 128 / 1000);
+    if (strcmp(name, "temperature") == 0) {
+        s->temperature = (int16_t) (temp * 128 / 1000);
+    } else if (strcmp(name, "limit_high") == 0) {
+        s->limit[0] = (int16_t) (temp * 128 / 1000);
+    }
+    else if (strcmp(name, "limit_hyst") == 0) {
+        s->limit[1] = (int16_t) (temp * 128 / 1000);
+    }
 
     tmp102_alarm_update(s);
 }
@@ -264,8 +278,14 @@ static void tmp102_realize(DeviceState *dev, Error **errp)
 static void tmp102_initfn(Object *obj)
 {
     object_property_add(obj, "temperature", "int",
-                        tmp102_get_temperature,
-                        tmp102_set_temperature, NULL, NULL, NULL);
+                        tmp102_get,
+                        tmp102_set, NULL, NULL, NULL);
+    object_property_add(obj, "limit_high", "int",
+                        tmp102_get,
+                        tmp102_set, NULL, NULL, NULL);
+    object_property_add(obj, "limit_hyst", "int",
+                        tmp102_get,
+                        tmp102_set, NULL, NULL, NULL);
 }
 
 static void tmp102_class_init(ObjectClass *klass, void *data)
