@@ -156,6 +156,13 @@ mlxreg_io_regmap_write(void *opaque, hwaddr addr, uint64_t val,
                            }
                        }
                        break;
+                   case MLXPLAT_CPLD_LPC_REG_LED1_OFFSET:
+                   case MLXPLAT_CPLD_LPC_REG_LED2_OFFSET:
+                   case MLXPLAT_CPLD_LPC_REG_LED3_OFFSET:
+                   case MLXPLAT_CPLD_LPC_REG_LED4_OFFSET:
+                   case MLXPLAT_CPLD_LPC_REG_LED5_OFFSET:
+                       s->io_regmap_buf[addr]=val;
+                       break;
                 }
                 break;
             case 2:
