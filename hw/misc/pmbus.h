@@ -21,6 +21,7 @@
 #define QEMU_PMBUS_H
 
 #include "hw/i2c/i2c.h"
+#include <math.h>
 /*
  * Registers
  */
@@ -429,6 +430,29 @@ typedef struct {
     uint8_t pmbus_ut_warn_limit[2];
     uint8_t pmbus_ut_fault_limit[2];
 
+    uint8_t pmbus_ut_fault_response[2];
+    uint8_t pmbus_vin_ov_fault_limit[2];
+    uint8_t pmbus_vin_ov_fault_response[2];
+    uint8_t pmbus_vin_ov_warn_limit[2];
+    uint8_t pmbus_vin_uv_warn_limit[2];
+    uint8_t pmbus_vin_uv_fault_limit[2];
+
+    uint8_t pmbus_vout_ov_fault_limit[2];
+    uint8_t pmbus_vout_ov_warn_limit[2];
+    uint8_t pmbus_vout_uv_warn_limit[2];
+    uint8_t pmbus_vout_uv_fault_limit[2];
+
+    uint8_t pmbus_iout_oc_fault_limit[2];
+    uint8_t pmbus_iout_oc_warn_limit[2];
+    uint8_t pmbus_iout_uc_fault_limit[2];
+
+    uint8_t pmbus_pout_op_fault_limit[2];
+    uint8_t pmbus_pout_op_warn_limit[2];
+    uint8_t pmbus_pin_op_warn_limit[2];
+
+    uint8_t pmbus_iin_oc_fault_limit[2];
+    uint8_t pmbus_iin_oc_warn_limit[2];
+
     uint8_t page;
     uint8_t crc_pec;
 } PMBUSState;
@@ -438,6 +462,8 @@ typedef struct {
 #define PMBUS(obj) \
     OBJECT_CHECK(PMBUSState, (obj), TYPE_PMBUS)
 
-
-
 #endif
+
+#define L16_EXPONENT    -12
+float _linear11_to_float (u_int16_t data);
+u_int16_t _float_to_linear11 (float data);
