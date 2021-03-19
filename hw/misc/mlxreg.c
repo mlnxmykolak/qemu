@@ -190,11 +190,18 @@ static const MemoryRegionOps mlxreg_io_regmap_ops = {
 
 
 static int mlxreg_write_i2c_block(I2CBus *bus, uint8_t addr, uint8_t *data,
-                      int len)
+                      int len, mlxregState *s)
 {
     int i;
 
     DPRINTK("i2c block read addr:%x, send_len:%d, len:%d\n", addr, send_len, len);
+
+    if (addr == 0x60)
+    {
+        len=(data[0]+len)>MLXREG_SIZE?MLXREG_SIZE-data[0]:len;
+        memcpy(&s->io_regmap_buf[data[0]], &data[1], len);
+        return len;
+    }
 
     if (len > 32) {
         len = 32;
@@ -212,11 +219,18 @@ static int mlxreg_write_i2c_block(I2CBus *bus, uint8_t addr, uint8_t *data,
 }
 
 static int mlxreg_read_i2c_block(I2CBus *bus, uint8_t addr, uint8_t *data, int send_len,
-                     int rlen)
+                     int rlen, mlxregState *s)
 {
     int i;
 
     DPRINTK("i2c block read addr:0x%x, send_len:%d, rlen:%d\n", addr, send_len, rlen);
+
+    if (addr == 0x60)
+    {
+        rlen=(data[0]+rlen)>MLXREG_SIZE?MLXREG_SIZE-data[0]:rlen;
+        memcpy(data, &s->io_regmap_buf[data[0]], rlen);
+        return rlen;
+    }
 
     if (send_len) {
         if (i2c_start_transfer(bus, addr, 0)) {
@@ -282,7 +296,7 @@ static void mlxreg_io_i2c_write(void *opaque, hwaddr addr,
                     ret_val=mlxreg_write_i2c_block(s->i2c_bus[s->mux_num],
                                        s->io_i2c_buf[MLXCPLD_LPCI2C_CMD_REG]>>1,
                                        &s->io_i2c_buf[MLXCPLD_LPCI2C_DATA_REG],
-                                       s->io_i2c_buf[MLXCPLD_LPCI2C_NUM_DAT_REG]+s->io_i2c_buf[MLXCPLD_LPCI2C_NUM_ADDR_REG]);
+                                       s->io_i2c_buf[MLXCPLD_LPCI2C_NUM_DAT_REG]+s->io_i2c_buf[MLXCPLD_LPCI2C_NUM_ADDR_REG], s);
                     if (ret_val < 0) {
                         s->io_i2c_buf[MLXCPLD_LPCI2C_STATUS_REG]|=MLXCPLD_LPCI2C_STATUS_NACK;
                     }
@@ -293,7 +307,7 @@ static void mlxreg_io_i2c_write(void *opaque, hwaddr addr,
                                           s->io_i2c_buf[MLXCPLD_LPCI2C_CMD_REG]>>1,
                                           &s->io_i2c_buf[MLXCPLD_LPCI2C_DATA_REG],
                                           s->io_i2c_buf[MLXCPLD_LPCI2C_NUM_ADDR_REG],
-                                          s->io_i2c_buf[MLXCPLD_LPCI2C_NUM_DAT_REG]);
+                                          s->io_i2c_buf[MLXCPLD_LPCI2C_NUM_DAT_REG], s);
                     if (ret_val < 0) {
                         s->io_i2c_buf[MLXCPLD_LPCI2C_STATUS_REG]|=MLXCPLD_LPCI2C_STATUS_NACK;
                     } else {
