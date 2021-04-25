@@ -38,6 +38,7 @@ typedef struct mlx_hotplug_psu_state {
     DeviceState *dev;
     DeviceState *vpd_dev;
     char *vpd_dname;
+    char *pmbus_data;
 } mlx_hotplug_psu_state;
 #define TYPE_MLX_HOTPLUG_PSU "mlx_hotplug_psu"
 #define MLX_PSU(obj) OBJECT_CHECK(mlx_hotplug_psu_state, (obj), TYPE_MLX_HOTPLUG_PSU)
@@ -48,6 +49,7 @@ static const VMStateDescription vmstate_mlx_hotplug_psu = {
 
 static Property mlx_hotplug_psu_properties[] = {
     DEFINE_PROP_STRING("drive", mlx_hotplug_psu_state, vpd_dname),
+    DEFINE_PROP_STRING("pmbus_data", mlx_hotplug_psu_state, pmbus_data),
     DEFINE_PROP_END_OF_LIST(),
 
 };
@@ -83,9 +85,14 @@ static void mlx_hotplug_psu_realize(DeviceState *ds, Error **errp)
     }
 
     psu_hdev->dev = qdev_create(BUS(mlxreg->i2c_bus[4]), TYPE_PMBUS);
+
     if(!psu_hdev->dev) {
         error_setg(errp, "mlxreg_psu: slot %d failed to create device. \n",
                                    hd->slot);
+    }
+    if(psu_hdev->pmbus_data) {
+        object_property_set_str(OBJECT(psu_hdev->dev), psu_hdev->pmbus_data, "drive",
+                                    errp);
     }
     qdev_prop_set_uint8(psu_hdev->dev, "address", 0x5a-hd->slot);
     qdev_init_nofail(psu_hdev->dev);

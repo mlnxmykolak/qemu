@@ -22,6 +22,8 @@
 
 #include "hw/i2c/i2c.h"
 #include <math.h>
+
+#include "sysemu/block-backend.h"
 /*
  * Registers
  */
@@ -394,67 +396,13 @@ typedef struct {
     uint8_t cmd;
     uint8_t ret_len;
     uint8_t cmd_len;
-
-    uint8_t* pmbus_regmap[PMBUS_MAX_REG_NUM];
-    uint8_t pmbus_regmap_field_len[PMBUS_MAX_REG_NUM];
-
-    uint8_t pmbus_page;
-    uint8_t pmbus_status_byte;
-    uint8_t pmbus_status_word[2];
-    uint8_t pmbus_status_vout;
-    uint8_t pmbus_status_iout;
-    uint8_t pmbus_status_input;
-    uint8_t pmbus_status_temperature;
-    uint8_t pmbus_status_fan12;
-    uint8_t pmbus_status_fan34;
-    uint8_t pmbus_capability;
-    uint8_t pmbus_vout_mode[2];
-    uint8_t pmbus_read_vin[2];
-    uint8_t pmbus_read_iin[2];
-    uint8_t pmbus_read_vcap[2];
-    uint8_t pmbus_read_vout[2];
-    uint8_t pmbus_read_iout[2];
-    uint8_t pmbus_read_temp1[2];
-    uint8_t pmbus_read_temp2[2];
-    uint8_t pmbus_read_temp3[2];
-    uint8_t pmbus_read_fan_speed1[2];
-    uint8_t pmbus_read_fan_speed2[2];
-    uint8_t pmbus_read_fan_speed3[2];
-    uint8_t pmbus_read_fan_speed4[2];
-    uint8_t pmbus_read_pout[2];
-    uint8_t pmbus_read_pin[2];
-
-    uint8_t pmbus_ot_fault_limit[2];
-    uint8_t pmbus_ot_fault_response;
-    uint8_t pmbus_ot_warn_limit[2];
-    uint8_t pmbus_ut_warn_limit[2];
-    uint8_t pmbus_ut_fault_limit[2];
-
-    uint8_t pmbus_ut_fault_response[2];
-    uint8_t pmbus_vin_ov_fault_limit[2];
-    uint8_t pmbus_vin_ov_fault_response[2];
-    uint8_t pmbus_vin_ov_warn_limit[2];
-    uint8_t pmbus_vin_uv_warn_limit[2];
-    uint8_t pmbus_vin_uv_fault_limit[2];
-
-    uint8_t pmbus_vout_ov_fault_limit[2];
-    uint8_t pmbus_vout_ov_warn_limit[2];
-    uint8_t pmbus_vout_uv_warn_limit[2];
-    uint8_t pmbus_vout_uv_fault_limit[2];
-
-    uint8_t pmbus_iout_oc_fault_limit[2];
-    uint8_t pmbus_iout_oc_warn_limit[2];
-    uint8_t pmbus_iout_uc_fault_limit[2];
-
-    uint8_t pmbus_pout_op_fault_limit[2];
-    uint8_t pmbus_pout_op_warn_limit[2];
-    uint8_t pmbus_pin_op_warn_limit[2];
-
-    uint8_t pmbus_iin_oc_fault_limit[2];
-    uint8_t pmbus_iin_oc_warn_limit[2];
+    uint8_t rcv_len;
 
     uint8_t page;
     uint8_t crc_pec;
+    BlockBackend *blk;
+    uint8_t pmbus_regmap_external[2][256][32];
+
 } PMBUSState;
 
 #define TYPE_PMBUS "pmbus"
