@@ -24,6 +24,7 @@
 #include <math.h>
 
 #include "sysemu/block-backend.h"
+#include "hw/i2c/smbus_slave.h"
 /*
  * Registers
  */
@@ -232,39 +233,6 @@ enum pmbus_regs {
 };
 
 /*
- * OPERATION
- */
-#define PB_OPERATION_CONTROL_ON     BIT(7)
-
-/*
- * CAPABILITY
- */
-#define PB_CAPABILITY_SMBALERT      BIT(4)
-#define PB_CAPABILITY_ERROR_CHECK   BIT(7)
-
-/*
- * VOUT_MODE
- */
-#define PB_VOUT_MODE_MODE_MASK      0xe0
-#define PB_VOUT_MODE_PARAM_MASK     0x1f
-
-#define PB_VOUT_MODE_LINEAR     0x00
-#define PB_VOUT_MODE_VID        0x20
-#define PB_VOUT_MODE_DIRECT     0x40
-
-/*
- * Fan configuration
- */
-#define PB_FAN_2_PULSE_MASK     (BIT(0) | BIT(1))
-#define PB_FAN_2_RPM            BIT(2)
-#define PB_FAN_2_INSTALLED      BIT(3)
-#define PB_FAN_1_PULSE_MASK     (BIT(4) | BIT(5))
-#define PB_FAN_1_RPM            BIT(6)
-#define PB_FAN_1_INSTALLED      BIT(7)
-
-enum pmbus_fan_mode { percent = 0, rpm };
-
-/*
  * STATUS_BYTE, STATUS_WORD (lower)
  */
 #define PB_STATUS_NONE_ABOVE        BIT(0)
@@ -277,65 +245,6 @@ enum pmbus_fan_mode { percent = 0, rpm };
 #define PB_STATUS_BUSY          BIT(7)
 
 /*
- * STATUS_WORD (upper)
- */
-#define PB_STATUS_UNKNOWN       BIT(8)
-#define PB_STATUS_OTHER         BIT(9)
-#define PB_STATUS_FANS          BIT(10)
-#define PB_STATUS_POWER_GOOD_N      BIT(11)
-#define PB_STATUS_WORD_MFR      BIT(12)
-#define PB_STATUS_INPUT         BIT(13)
-#define PB_STATUS_IOUT_POUT     BIT(14)
-#define PB_STATUS_VOUT          BIT(15)
-
-/*
- * STATUS_IOUT
- */
-#define PB_POUT_OP_WARNING      BIT(0)
-#define PB_POUT_OP_FAULT        BIT(1)
-#define PB_POWER_LIMITING       BIT(2)
-#define PB_CURRENT_SHARE_FAULT      BIT(3)
-#define PB_IOUT_UC_FAULT        BIT(4)
-#define PB_IOUT_OC_WARNING      BIT(5)
-#define PB_IOUT_OC_LV_FAULT     BIT(6)
-#define PB_IOUT_OC_FAULT        BIT(7)
-
-/*
- * STATUS_VOUT, STATUS_INPUT
- */
-#define PB_VOLTAGE_UV_FAULT     BIT(4)
-#define PB_VOLTAGE_UV_WARNING       BIT(5)
-#define PB_VOLTAGE_OV_WARNING       BIT(6)
-#define PB_VOLTAGE_OV_FAULT     BIT(7)
-
-/*
- * STATUS_INPUT
- */
-#define PB_PIN_OP_WARNING       BIT(0)
-#define PB_IIN_OC_WARNING       BIT(1)
-#define PB_IIN_OC_FAULT         BIT(2)
-
-/*
- * STATUS_TEMPERATURE
- */
-#define PB_TEMP_UT_FAULT        BIT(4)
-#define PB_TEMP_UT_WARNING      BIT(5)
-#define PB_TEMP_OT_WARNING      BIT(6)
-#define PB_TEMP_OT_FAULT        BIT(7)
-
-/*
- * STATUS_FAN
- */
-#define PB_FAN_AIRFLOW_WARNING      BIT(0)
-#define PB_FAN_AIRFLOW_FAULT        BIT(1)
-#define PB_FAN_FAN2_SPEED_OVERRIDE  BIT(2)
-#define PB_FAN_FAN1_SPEED_OVERRIDE  BIT(3)
-#define PB_FAN_FAN2_WARNING     BIT(4)
-#define PB_FAN_FAN1_WARNING     BIT(5)
-#define PB_FAN_FAN2_FAULT       BIT(6)
-#define PB_FAN_FAN1_FAULT       BIT(7)
-
-/*
  * CML_FAULT_STATUS
  */
 #define PB_CML_FAULT_OTHER_MEM_LOGIC    BIT(0)
@@ -346,62 +255,17 @@ enum pmbus_fan_mode { percent = 0, rpm };
 #define PB_CML_FAULT_INVALID_DATA   BIT(6)
 #define PB_CML_FAULT_INVALID_COMMAND    BIT(7)
 
-enum pmbus_sensor_classes {
-    PSC_VOLTAGE_IN = 0,
-    PSC_VOLTAGE_OUT,
-    PSC_CURRENT_IN,
-    PSC_CURRENT_OUT,
-    PSC_POWER,
-    PSC_TEMPERATURE,
-    PSC_FAN,
-    PSC_PWM,
-    PSC_NUM_CLASSES     /* Number of power sensor classes */
-};
 
-#define PMBUS_PAGES 32  /* Per PMBus specification */
-
-/* Functionality bit mask */
-#define PMBUS_HAVE_VIN      BIT(0)
-#define PMBUS_HAVE_VCAP     BIT(1)
-#define PMBUS_HAVE_VOUT     BIT(2)
-#define PMBUS_HAVE_IIN      BIT(3)
-#define PMBUS_HAVE_IOUT     BIT(4)
-#define PMBUS_HAVE_PIN      BIT(5)
-#define PMBUS_HAVE_POUT     BIT(6)
-#define PMBUS_HAVE_FAN12    BIT(7)
-#define PMBUS_HAVE_FAN34    BIT(8)
-#define PMBUS_HAVE_TEMP     BIT(9)
-#define PMBUS_HAVE_TEMP2    BIT(10)
-#define PMBUS_HAVE_TEMP3    BIT(11)
-#define PMBUS_HAVE_STATUS_VOUT  BIT(12)
-#define PMBUS_HAVE_STATUS_IOUT  BIT(13)
-#define PMBUS_HAVE_STATUS_INPUT BIT(14)
-#define PMBUS_HAVE_STATUS_TEMP  BIT(15)
-#define PMBUS_HAVE_STATUS_FAN12 BIT(16)
-#define PMBUS_HAVE_STATUS_FAN34 BIT(17)
-#define PMBUS_HAVE_VMON     BIT(18)
-#define PMBUS_HAVE_STATUS_VMON  BIT(19)
-#define PMBUS_HAVE_PWM12    BIT(20)
-#define PMBUS_HAVE_PWM34    BIT(21)
-
-#define PMBUS_PAGE_VIRTUAL  BIT(31)
-
-enum pmbus_data_format { linear = 0, direct, vid };
-enum vrm_version { vr11 = 0, vr12, vr13, imvp9, amd625mv };
-
-#define PMBUS_VPD_CMD_LEN 16
 typedef struct {
-    I2CSlave parent_obj;
+    SMBusDevice parent_obj;
 
-    uint8_t cmd;
     uint8_t ret_len;
     uint8_t cmd_len;
-    uint8_t rcv_len;
 
     uint8_t page;
     uint8_t crc_pec;
     BlockBackend *blk;
-    uint8_t pmbus_regmap_external[2][256][32];
+    uint8_t pmbus_regmap_external[2][256][34];
 
 } PMBUSState;
 

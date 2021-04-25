@@ -27,50 +27,6 @@
 #include "qapi/error.h"
 #include "pmbus.h"
 
-/**
- * DSCR: Converts a LinearFloat11 formatted word into float value
- * RECV: data
- * RTRN: converted data
- */
-float _linear11_to_float (u_int16_t data) {
-    int8_t  exponent = data >> 11;                  /* extract exponent as MS 5 bits */
-    int16_t mantissa = data & 0x7ff;                /* extract mantissa as LS 11 bits */
-    if( exponent > 0x0F )   exponent |= 0xE0;       /* sign extend exponent from 5 to 8 bits */
-    if( mantissa > 0x03FF ) mantissa |= 0xF800;     /* sign extend mantissa from 11 to 16 bits */
-    return mantissa * pow(2, exponent);             /* compute value as mantissa * 2^(exponent) */
-}
-
-
-/**
- * DSCR: Converts a float value into a LinearFloat11 formatted word
- * RECV: data
- * RTRN: converted data
- */
-u_int16_t _float_to_linear11 (float data) {
-    int exponent = -16;                                 /* set exponent to -16 */
-    int mantissa = (int)(data / pow(2.0, exponent));    /* extract mantissa from input value */
-
-    /* Search for an exponent that produces a valid 11-bit mantissa */
-    do {
-        if ((mantissa >= -1024) && (mantissa <= +1023)) {
-            break;  /* stop if mantissa valid */
-        }
-        exponent++;
-        mantissa = (int)(data / pow(2.0, exponent));
-    } while (exponent < +15);
-
-    /* Format the exponent of the L11 */
-    u_int16_t uExponent = exponent << 11;
-
-    /* Format the mantissa of the L11 uint16 uMantissa = mantissa & 0x07FF; */
-    u_int16_t uMantissa = mantissa & 0x07FF;
-
-    /* Compute value as exponent | mantissa return uExponent | uMantissa;   */
-    return uExponent | uMantissa;
-
-    return (u_int32_t)(data / pow(2, L16_EXPONENT));
-}
-
 #define POLY    (0x1070U << 3)
 static uint8_t crc8(uint16_t data)
 {
@@ -89,100 +45,21 @@ static uint8_t i2c_smbus_pec(uint8_t crc, uint8_t *p, size_t count)
 {
     int i;
 
-    for (i = 0; i < count; i++)
+    //printf("crc_init: 0x%02x \n", crc);
+    for (i = 0; i < count; i++) {
         crc = crc8((crc ^ p[i]) << 8);
-    //printf ("crc: 0x%x\n",crc);
+        //printf("crc_data: 0x%02x \n", p[i]);
+    }
+    //printf("crc: 0x%02x \n", crc);
     return crc;
 }
 
 #define I2C_WR_BIT 0x01
-static int pmbus_recv(I2CSlave *i2c, uint8_t value)
-{
-    PMBUSState *s = PMBUS(i2c);
-    //printf("pmbus_rcv value:0x%x\n", value);
-    s->ret_len=0;
-    s->cmd_len=0;
 
-    s->cmd=value;
-    s->cmd_len=s->pmbus_regmap_external[s->page][s->cmd][0];
-    // If len > 2 its pmbus block and need len to be included to first byte.
-    if(s->cmd_len>2) {
-        s->cmd_len++;
-    }
-
-    switch(s->cmd) {
-        case PMBUS_PAGE:
-             if (s->rcv_len == 1) {
-                 s->page=value;
-             }
-            break;
-        default:
-            break;
-    }
-    s->rcv_len++;
-    return 0;
-}
-
-static uint8_t pmbus_send(I2CSlave *i2c)
-{
-    uint8_t ret=0;
-    PMBUSState *s = PMBUS(i2c);
-    s->rcv_len=0;
-    if (s->ret_len == 0 ) {
-        uint8_t i2c_addr=(i2c->address<<1);
-        /* Add partial PEC. Check PEC if last message is a write */
-        s->crc_pec=i2c_smbus_pec(0, &i2c_addr, 1);
-        s->crc_pec=i2c_smbus_pec(s->crc_pec, &s->cmd, 1);
-        i2c_addr=(i2c->address<<1)|I2C_WR_BIT;
-        s->crc_pec=i2c_smbus_pec(s->crc_pec, &i2c_addr, 1);
-    }
-    if((s->ret_len == s->cmd_len) && (s->cmd_len)) {
-        ret=s->crc_pec;
-    }
-    else
-    {
-        if(s->cmd_len>2)
-        {
-            // If len > 2 its pmbus block and need len to be included to first byte.
-            ret=s->pmbus_regmap_external[s->page][s->cmd][s->ret_len];
-        }
-        else
-        {
-            ret=s->pmbus_regmap_external[s->page][s->cmd][s->ret_len+1];
-        }
-        s->crc_pec=i2c_smbus_pec(s->crc_pec, &ret, 1);
-    }
-    printf("pmbus_send cmd:0x%x(%d), %d: 0x%x\n",s->cmd,s->cmd,s->ret_len, ret);
-    s->ret_len++;
-    return ret;
-}
-
-static const VMStateDescription vmstate_pmbus = {
-    .name = "pmbus",
-    .version_id = 1,
-    .minimum_version_id = 1,
-    .fields = (VMStateField[]) {
-        VMSTATE_I2C_SLAVE(parent_obj, PMBUSState),
-        VMSTATE_END_OF_LIST()
-    }
-};
-
-static int pmbus_init(I2CSlave *d)
-{
-    DeviceState *dev = DEVICE(d);
-    PMBUSState *s = PMBUS(dev);
-
-    vmstate_register(VMSTATE_IF(dev), VMSTATE_INSTANCE_ID_ANY,
-                     &vmstate_pmbus, s);
-
-    return 0;
-}
 
 static void pmbus_realize(DeviceState *dev, Error **errp)
 {
-    I2CSlave *i2c = I2C_SLAVE(dev);
     PMBUSState *s = PMBUS(dev);
-    //Error *local_err = NULL;
 
     if (s->blk) {
             int64_t size = blk_getlength(s->blk);
@@ -195,14 +72,89 @@ static void pmbus_realize(DeviceState *dev, Error **errp)
             }
     }
 
+}
 
-    pmbus_init(i2c);
+static void quick_cmd(SMBusDevice *dev, uint8_t read) {
+    printf("quick_cmd \n");
 }
 
 
-static void pmbus_initfn(Object *obj)
-{
-//    PMBUSState* s=PMBUS(obj);
+static int write_data(SMBusDevice *dev, uint8_t *buf, uint8_t len) {
+    PMBUSState *s = PMBUS(dev);
+
+    //printf("write_data cmd:0x%x, len:0x%x\n", buf[0], len);
+    s->ret_len=0;
+    int i=0;
+
+    for (i=0; i<len;i++) {
+        switch(buf[0]) {
+            case PMBUS_PAGE:
+                 if (i==1) {
+                     s->page=buf[1];
+                     s->pmbus_regmap_external[s->page][dev->data_buf[0]][0]=1;
+                     s->pmbus_regmap_external[s->page][dev->data_buf[0]][1]=buf[1];
+                 }
+                break;
+            case PMBUS_CLEAR_FAULTS:
+                s->pmbus_regmap_external[0][PMBUS_STATUS_BYTE][1]=0;
+                s->pmbus_regmap_external[0][PMBUS_STATUS_CML][1]=0;
+                s->pmbus_regmap_external[0][PMBUS_STATUS_FAN_12][1]=0;
+                s->pmbus_regmap_external[0][PMBUS_STATUS_FAN_34][1]=0;
+                s->pmbus_regmap_external[0][PMBUS_STATUS_INPUT][1]=0;
+                s->pmbus_regmap_external[0][PMBUS_STATUS_IOUT][1]=0;
+                s->pmbus_regmap_external[0][PMBUS_STATUS_MFR_SPECIFIC][1]=0;
+                s->pmbus_regmap_external[0][PMBUS_STATUS_OTHER][1]=0;
+                s->pmbus_regmap_external[0][PMBUS_STATUS_TEMPERATURE][1]=0;
+                s->pmbus_regmap_external[0][PMBUS_STATUS_WORD][1]=0;
+                s->pmbus_regmap_external[0][PMBUS_STATUS_WORD][2]=0;
+                s->pmbus_regmap_external[0][PMBUS_STATUS_VOUT][1]=0;
+                s->pmbus_regmap_external[0][PMBUS_VIRT_STATUS_VMON][1]=0;
+                break;
+            default:
+                break;
+        }
+    }
+    return 0;
+}
+
+static uint8_t receive_byte(SMBusDevice *dev) {
+    uint8_t ret=0;
+    PMBUSState *s = PMBUS(dev);
+    //I2CBus *bus = I2C_BUS(qdev_get_parent_bus(DEVICE(dev)));
+    s->cmd_len=s->pmbus_regmap_external[s->page][dev->data_buf[0]][0];
+
+    // Send length if block command
+    uint8_t idx=s->cmd_len>2?s->ret_len:s->ret_len+1;
+    s->cmd_len=s->cmd_len>2?s->cmd_len+1:s->cmd_len;
+
+    if (!s->cmd_len) {
+        ret=0xff;
+        //i2c_nack(bus);
+        //s->pmbus_regmap_external[0][PMBUS_STATUS_BYTE][1]|=PB_STATUS_CML;
+        //s->pmbus_regmap_external[0][PMBUS_STATUS_CML][1]|=PB_CML_FAULT_INVALID_COMMAND;
+    }
+    else
+    {
+        if (!s->ret_len) {
+            uint8_t i2c_addr=(dev->i2c.address<<1);
+            /* Add partial PEC. Check PEC if last message is a write */
+            s->crc_pec=i2c_smbus_pec(0, &i2c_addr, 1);
+            s->crc_pec=i2c_smbus_pec(s->crc_pec, &dev->data_buf[0], 1);
+            i2c_addr=(dev->i2c.address<<1)|I2C_WR_BIT;
+            s->crc_pec=i2c_smbus_pec(s->crc_pec, &i2c_addr, 1);
+        }
+        if(s->ret_len == s->cmd_len) {
+            ret=s->crc_pec;
+        }
+        else
+        {
+            ret=s->pmbus_regmap_external[s->page][dev->data_buf[0]][idx];
+            s->crc_pec=i2c_smbus_pec(s->crc_pec, &ret, 1);
+        }
+    }
+    //printf("receive_byte cmd:0x%x(%d), cmd_len:%d, ret_len:%d 0x%x\n",dev->data_buf[0],dev->data_buf[0],s->cmd_len ,s->ret_len, ret);
+    s->ret_len++;
+    return ret;
 }
 
 static Property pmbus_class_properties[] = {
@@ -212,19 +164,19 @@ static Property pmbus_class_properties[] = {
 
 static void pmbus_class_init(ObjectClass *klass, void *data)
 {
-    I2CSlaveClass *k = I2C_SLAVE_CLASS(klass);
+    SMBusDeviceClass *k = SMBUS_DEVICE_CLASS(klass);
     DeviceClass *dc = DEVICE_CLASS(klass);
     dc->realize = pmbus_realize;
-    k->recv = pmbus_send;
-    k->send = pmbus_recv;
+    k->quick_cmd = quick_cmd;
+    k->write_data = write_data;
+    k->receive_byte = receive_byte;
     device_class_set_props(dc, pmbus_class_properties);
 }
 
 static const TypeInfo pmbus_info = {
     .name          = TYPE_PMBUS,
-    .parent        = TYPE_I2C_SLAVE,
+    .parent        = TYPE_SMBUS_DEVICE,
     .instance_size = sizeof(PMBUSState),
-    .instance_init = pmbus_initfn,
     .class_init    = pmbus_class_init,
 };
 
