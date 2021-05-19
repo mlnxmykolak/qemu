@@ -39,6 +39,8 @@ typedef struct mlx_hotplug_psu_state {
     DeviceState *vpd_dev;
     char *vpd_dname;
     char *pmbus_data;
+    uint8_t i2c_bus_num;
+    uint32_t drive_size;
 } mlx_hotplug_psu_state;
 #define TYPE_MLX_HOTPLUG_PSU "mlx_hotplug_psu"
 #define MLX_PSU(obj) OBJECT_CHECK(mlx_hotplug_psu_state, (obj), TYPE_MLX_HOTPLUG_PSU)
@@ -50,6 +52,8 @@ static const VMStateDescription vmstate_mlx_hotplug_psu = {
 static Property mlx_hotplug_psu_properties[] = {
     DEFINE_PROP_STRING("drive", mlx_hotplug_psu_state, vpd_dname),
     DEFINE_PROP_STRING("pmbus_data", mlx_hotplug_psu_state, pmbus_data),
+    DEFINE_PROP_UINT8("bus_num", mlx_hotplug_psu_state, i2c_bus_num, 4),
+    DEFINE_PROP_UINT32("drive_size", mlx_hotplug_psu_state, drive_size, 4096),
     DEFINE_PROP_END_OF_LIST(),
 
 };
@@ -84,7 +88,7 @@ static void mlx_hotplug_psu_realize(DeviceState *ds, Error **errp)
                    hd->slot);
     }
 
-    psu_hdev->dev = qdev_create(BUS(mlxreg->i2c_bus[4]), TYPE_PMBUS);
+    psu_hdev->dev = qdev_create(BUS(mlxreg->i2c_bus[psu_hdev->i2c_bus_num]), TYPE_PMBUS);
 
     if(!psu_hdev->dev) {
         error_setg(errp, "mlxreg_psu: slot %d failed to create device. \n",
@@ -98,14 +102,15 @@ static void mlx_hotplug_psu_realize(DeviceState *ds, Error **errp)
     qdev_init_nofail(psu_hdev->dev);
 
     if(psu_hdev->vpd_dname) {
-        psu_hdev->vpd_dev = qdev_create(BUS(mlxreg->i2c_bus[4]), "at24c-eeprom");
+        psu_hdev->vpd_dev = qdev_create(BUS(mlxreg->i2c_bus[psu_hdev->i2c_bus_num]), "at24c-eeprom");
         if (!psu_hdev->dev)
         {
             error_setg(errp, "mlxreg_psu: slot %d failed to create device. \n",
                        hd->slot);
         }
         qdev_prop_set_uint8(psu_hdev->vpd_dev, "address", 0x52 - hd->slot);
-        qdev_prop_set_uint32(psu_hdev->vpd_dev, "rom-size", 4096);
+
+        qdev_prop_set_uint32(psu_hdev->vpd_dev, "rom-size", psu_hdev->drive_size<512?512:psu_hdev->drive_size);
         object_property_set_str(OBJECT(psu_hdev->vpd_dev), psu_hdev->vpd_dname, "drive",
                                 errp);
         qdev_init_nofail(psu_hdev->vpd_dev);
